@@ -1,0 +1,810 @@
+#include <PS2Keyboard.h>
+// PS2 KEYBOARD
+const int DataPin = 8; // DATA out of ps2 keyboard
+const int IRQpin =  3; // for arduino nano //clock out of ps2 keyboard
+PS2Keyboard keyboard;
+
+
+// AUTOMATIC KEYER USING PADDLE AND USB/PS2 KEYBOARD
+int Maximum_speed_WPM=30;
+int Minimum_speed_WPM=3;
+int P_DOT =   2;   // Connects to the dot lever of the paddle
+int P_DASH =  4;   // Connects to the dash lever of the paddle 3 to 4
+int P_AUDIO = 12;   // Audio output 
+int P_CW  =  13;   // Output of the keyer, connect to your radio
+#define P_SPEED A0   // Attached to center pin of potmeter, allows you
+int speed;
+
+// PRE SET MESSAGES - YOU CAN EDIT THIS PORTION
+const String CQ_CALL="cq cq cq de vu2egm vu2egm vu2egm pse k";   // on PAGE UP BUTTON PRESS
+const String QSO_CLOSE="bk de vu2egm tkx for qso  73 tu ee";     // on PAGE DOWN BUTTON PRESS
+const String CALL_QRZ="qrz ? de vu2egm k";                     // on DELETE BUTTON PRESS
+const String NET_CLOSE="rr de vu2egm ur rst 599 my 73 va tu ee"; // on E BUTTON PRESS
+const String CALL_HI="hi"; // on H BUTTON PRESS
+const String CALL_3="egm"; // on Tab BUTTON PRESS
+
+////////////////////////////// CW sender/////
+String mappings[] = {
+                     ".-",  // A
+                     "-...",
+                     "-.-.",  
+                     "-..",
+                     ".",  
+                     "..-.",
+                     "--.",  
+                     "....",
+                     "..",  
+                     ".---",
+                     "-.-",  
+                     ".-..",
+                     "--",  
+                     "-.",
+                     "---",  
+                     ".--.",
+                     "--.-",  
+                     ".-.",
+                     "...",  
+                     "-",                      
+                     "..-",  
+                     "...-",
+                     ".--",  
+                     "-..-",
+                     "-.--",  
+                     "--..", // Z
+                     ".----",  // 1
+                     "..---",
+                     "...--",  
+                     "....-",
+                     ".....",  
+                     "-....",
+                     "--...",  
+                     "---..",
+                     "----.",  
+                     "-----",   // 0
+                     "..--..",  // ?
+                     ".-.-.-",  // .
+                     "--..--",  // ,
+                     "-..-.",   // /
+                     "...-.-"  // @
+                     };
+
+
+String  morsecode;
+String message;
+const String  characters = "abcdefghijklmnopqrstuvwxyz1234567890?.,/";
+int sm_time;
+int time_step=100;  // initial timer
+int TIME_UNIT;
+String inputString = "";             // a String to hold incoming data
+bool stringComplete = false;  // whether the string is complete
+
+
+////////////////////////////
+
+
+
+
+
+
+
+
+int KEY_PIN=13; // relay drive to transimit cw in port
+
+
+
+
+
+
+// tone frequency for speaker
+int notes[] = {
+  1047, 1319, 1175, 1568
+};
+
+
+int my_tone_frequency=600; // initial side tone frequency
+int tone_pin = 7;
+
+
+
+
+
+
+
+
+
+
+
+void setup() {
+  delay(1000);
+  keyboard.begin(DataPin, IRQpin);
+  //Serial.begin(9600);
+ // Serial.println("Keyboard Test:");
+
+
+
+
+
+
+        pinMode(13, OUTPUT);  // connect a buzzer at pin 13 to listen cw
+        pinMode(9, OUTPUT);  // connect and LED in pin 9
+    
+  pinMode(6, OUTPUT);  // Local speaker or LED
+    
+        // reserve 200 bytes for the inputString:
+        inputString.reserve(200);
+
+
+  pinMode(P_DOT, INPUT);
+  pinMode(P_DASH, INPUT);
+  pinMode(P_AUDIO, OUTPUT);
+  digitalWrite(P_CW, LOW);          // Start with key up
+
+
+
+ pinMode(9, OUTPUT); // vu2egm version
+ 
+  // sound welcome tone
+  speeddown();
+  speedup();
+  // speeddown_mute();
+  speedup_mute();
+  
+ }
+
+
+void loop() {
+
+
+//// LAMBIC KEYER START
+speed = 60000 / (map(analogRead(P_SPEED), 0, 1023, Maximum_speed_WPM, Minimum_speed_WPM) * 73);
+
+  // speed = 100;
+ if(!digitalRead(P_DOT))        // If the dot lever is presssed..
+     {
+    keyAndBeep(speed);           // ... send a dot at the given speed
+    delay(speed);                //     and wait before sending next
+     }
+
+  
+if(!digitalRead(P_DASH))       // If the dash lever is pressed...
+    {
+   keyAndBeep(speed*3);         // ... send a dash at the given speed
+   delay(speed);                //     and wait before sending next
+    }
+//// LAMBIC KEYER CLOSE
+
+
+
+
+
+  
+  // print the string when a newline arrives:
+  if (stringComplete)
+  {
+     //   Serial.println(inputString);
+    
+        message=inputString;
+        digitalWrite(9,HIGH);
+        delay(100);
+        int result= messagetocw();
+        digitalWrite(9,LOW);
+    
+        // clear the string:
+        inputString = "";
+        stringComplete = false;
+  }
+  // print the string when a newline arrives:
+
+
+  if (keyboard.available()) {
+    
+        // read the next key
+        char c = keyboard.read();
+    
+        // check for some of the special keys
+        if (c == PS2_ENTER) {
+          // Serial.println();
+          
+
+
+
+
+          
+        } else if (c == PS2_TAB) {
+         // Serial.print("[Tab]");
+
+
+           message=CALL_3;
+           int result= messagetocw();
+     
+
+
+          
+        } else if (c == PS2_ESC) {
+        //  Serial.print("[escape]");
+// toggle between pin 7 and 9
+// 7 is correct tone pin, switch to 9 which is not connected to any speaker 
+if(tone_pin==9)
+{
+tone_pin=7;
+}
+else
+{
+tone_pin=9;
+}
+
+          
+        } else if (c == PS2_PAGEDOWN) {
+          
+          
+           message=QSO_CLOSE;
+       //   digitalWrite(9,HIGH);
+          int result= messagetocw();
+      //    digitalWrite(9,LOW);
+          
+        } else if (c == PS2_PAGEUP) {
+          //Serial.print("[PgUp]");
+
+           message=CQ_CALL;
+        //  digitalWrite(9,HIGH);
+          int result= messagetocw();
+      //    digitalWrite(9,LOW);
+          
+        } else if (c == PS2_LEFTARROW) {
+        //  Serial.print("[Left]");
+           speeddown();
+
+          
+        } else if (c == PS2_RIGHTARROW) {
+        //  Serial.print("[Right]");
+         speedup();
+        
+        } else if (c == PS2_DELETE) {
+       
+
+           message=CALL_QRZ;
+        //  digitalWrite(9,HIGH);
+          int result= messagetocw();
+         // digitalWrite(9,LOW);
+
+
+          
+          
+        } else if (c == PS2_UPARROW) {
+         // Serial.print("[Up]- Speed UP");
+          speedup();
+          
+        } else if (c == PS2_DOWNARROW) {
+        //  Serial.print("[Down]- Speed DOWN");
+          speeddown();
+          
+        } else if (c =='Z') {
+          my_tone_frequency = 523;
+          message="t";
+         int result= messagetotone();
+
+
+        } else if (c == 'X') {
+
+          my_tone_frequency = 587;
+          message="t";
+         int result= messagetotone();
+
+        } else if (c == 'C') {
+          my_tone_frequency = 659;
+          message="t";
+         int result= messagetotone();
+
+
+              } else if (c == 'V') {
+                
+          my_tone_frequency = 698;
+          message="t";
+         int result= messagetotone();
+
+
+              } else if (c == 'B') {
+                
+          my_tone_frequency = 784;
+          message="t";
+         int result= messagetotone();
+
+              } else if (c == 'N') {
+                
+          my_tone_frequency = 880;
+          message="t";
+         int result= messagetotone();
+         
+                       } else if (c == 'M') {
+                
+          my_tone_frequency = 988;
+          message="t";
+         int result= messagetotone();
+
+
+                      } else if (c == '<') {
+                
+          my_tone_frequency = 1047;
+          message="t";
+         int result= messagetotone();
+
+                      } else if (c == 'E') {
+                
+         
+          message=NET_CLOSE;
+         int result= messagetocw();
+
+
+                      } else if (c == 'H') {
+                
+         
+          message=CALL_HI;
+         int result= messagetocw();
+
+
+
+
+
+         
+
+//other actions
+              } else if (c == 'W') {
+
+          toneup();
+          message="r";
+         int result= messagetotone();
+         
+
+              
+
+                    } else if (c == 'S') {
+                      
+           tonedown();
+          message="r";
+         int result= messagetotone();
+
+
+                    } else if (c == '!') {
+              time_step = 300;
+         tone(7, 1073);
+         delay(100);
+         tone(7, 1000);
+         delay(100);
+         tone(7, 1073);
+         delay(100);
+         noTone(7);
+              
+
+                          } else if (c == '@') {
+ 
+                        time_step = 250;
+         tone(7, 1073);
+         delay(100);
+         tone(7, 1000);
+         delay(100);
+         tone(7, 1073);
+         delay(100);
+         noTone(7);
+
+                          } else if (c == '#') {
+ 
+                        time_step = 200;
+         tone(7, 1073);
+         delay(100);
+         tone(7, 1000);
+         delay(100);
+         tone(7, 1073);
+         delay(100);
+         noTone(7);
+
+
+                                   } else if (c == '$') {
+ 
+                        time_step = 150;
+         tone(7, 1073);
+         delay(100);
+         tone(7, 1000);
+         delay(100);
+         tone(7, 1073);
+         delay(100);
+         noTone(7);
+
+                                            } else if (c == '%') {
+ 
+                        time_step = 100;
+         tone(7, 1073);
+         delay(100);
+         tone(7, 1000);
+         delay(100);
+         tone(7, 1073);
+         delay(100);
+         noTone(7);
+
+
+                                                     } else if (c == '^') {
+ 
+                        time_step = 75;
+         tone(7, 1073);
+         delay(100);
+         tone(7, 1000);
+         delay(100);
+         tone(7, 1073);
+         delay(100);
+         noTone(7);
+
+
+         
+                                                     } else if (c == '&') {
+ 
+                        time_step = 50;
+         tone(7, 1073);
+         delay(100);
+         tone(7, 1000);
+         delay(100);
+         tone(7, 1073);
+         delay(100);
+         noTone(7);
+
+                                                              } else if (c == '*') {
+ 
+                        time_step = 40;
+         tone(7, 1073);
+         delay(100);
+         tone(7, 1000);
+         delay(100);
+         tone(7, 1073);
+         delay(100);
+         noTone(7);
+
+                                                                       } else if (c == '(') {
+ 
+                        time_step = 30;
+         tone(7, 1073);
+         delay(100);
+         tone(7, 1000);
+         delay(100);
+         tone(7, 1073);
+         delay(100);
+         noTone(7);
+//CONTEST TEST SH
+ 
+
+
+
+
+
+
+
+
+        } else {
+          
+          // otherwise, just print all normal characters
+        //  Serial.print(c);
+
+
+///Launching
+        message=c;
+       // digitalWrite(9,HIGH);
+       // delay(100);
+        int result= messagetocw();
+       // digitalWrite(9,LOW);
+
+
+///Launching
+
+
+
+
+
+
+
+
+          
+        }
+ 
+  }// 'if' is close
+
+
+ 
+}// LOOP() close
+
+
+
+
+
+
+
+////LAMBIC FUNCTIONS START
+
+
+// Key the transmitter and sound a beep
+void keyAndBeep(int speed)
+{
+  digitalWrite(P_CW, HIGH);            // Key down
+
+
+      tone(tone_pin, my_tone_frequency);
+        
+       // tone(7, 1500);
+
+
+  for (int i=0; i < speed; i++)    // Beep loop
+  {
+   //digitalWrite(P_AUDIO, HIGH);
+   delay(1);
+  // digitalWrite(P_AUDIO, LOW);
+   delay(1);
+
+  }
+    noTone(tone_pin);
+
+ 
+  digitalWrite(P_CW, LOW);             // Key up
+
+ }
+////LAMBIC FUNCTIONS CLOSE
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+void toneup()
+{
+my_tone_frequency = my_tone_frequency + 50;
+  
+}
+
+void tonedown()
+{
+my_tone_frequency = my_tone_frequency - 50;
+  
+}
+
+void speedup()
+{
+  time_step=time_step-10;
+
+
+        if(time_step<=10)
+  {
+            time_step=10;
+  }
+
+
+ 
+  for (int thisSensor = 0; thisSensor < 4; thisSensor++) {
+         tone(7, notes[thisSensor]);
+         delay(time_step);
+         noTone(7);
+  }
+ 
+}
+
+
+
+
+void speeddown()
+{
+  time_step=time_step+10;
+ 
+    
+  for (int thisSensor = 3; thisSensor >= 0; thisSensor--) {
+         tone(7, notes[thisSensor]);
+         delay(time_step);
+         noTone(7);
+  }
+}
+
+
+
+void  speedup_mute(){
+time_step=time_step-10;
+        if(time_step<=10)
+  {
+            time_step=10;
+  }
+  
+ }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+int messagetocw()
+{  
+  // FUNCTION messagetocw() START
+ 
+  // int size = strlen(message);
+  int size = message.length();
+  int TIME_UNIT = 50; // default time for DIT
+  ///
+  if(TIME_UNIT==time_step)
+  {
+    
+  }
+  else
+  {
+        TIME_UNIT=time_step;
+  }
+
+  if(TIME_UNIT<=10)
+  {
+        TIME_UNIT=10;
+        time_step=10;
+  }
+
+ 
+  const int DOT = TIME_UNIT;
+  const int DASH = 3 * TIME_UNIT;
+  const int SYMBOL_SPACE = DOT;
+  const int LETTER_SPACE = 2 * DOT;
+  const int WORD_SPACE = 5 * DOT;
+
+  
+ 
+  message.toLowerCase();
+  for (int i = 0; i < size; i++) {
+    
+        // const char* ch = strchr(characters, tolower(message[i]));
+        char ch = characters.charAt(characters.indexOf(message.charAt(i)));//
+        // if (ch != NULL){
+   if (ch != '\0'){
+          
+          // int position = ch-characters;
+          int position = characters.indexOf(message.charAt(i));
+          
+          morsecode = mappings[position];
+          
+          // int count = strlen(morsecode);
+         int count = morsecode.length();
+          
+
+          
+          
+          for( int j=0; j< count; j++)
+          {
+            
+            char symbol = morsecode[j];
+            
+            if(symbol =='.')
+            {
+              sm_time = DOT;
+            }
+            
+            if(symbol =='-')
+            {
+              sm_time = DASH;
+            }
+            digitalWrite(KEY_PIN, HIGH);
+
+         tone(tone_pin, my_tone_frequency);
+        
+        
+
+
+
+            
+            delay(sm_time);
+            digitalWrite(KEY_PIN, LOW);
+             noTone(tone_pin);
+            delay(SYMBOL_SPACE);
+          }// for loop close2
+          
+          delay(LETTER_SPACE);
+          
+        }
+        delay(WORD_SPACE);
+    
+  }// for loop close1
+ 
+} // FUNCTION messagetocw() close
+
+
+
+
+
+int messagetotone()
+{  
+  // FUNCTION messagetocw() START
+ 
+  // int size = strlen(message);
+  int size = message.length();
+  int TIME_UNIT = 50; // default time for DIT
+  ///
+  if(TIME_UNIT==time_step)
+  {
+    
+  }
+  else
+  {
+        TIME_UNIT=time_step;
+  }
+
+  if(TIME_UNIT<=10)
+  {
+        TIME_UNIT=10;
+        time_step=10;
+  }
+
+ 
+  const int DOT = TIME_UNIT;
+  const int DASH = 3 * TIME_UNIT;
+  const int SYMBOL_SPACE = DOT;
+  const int LETTER_SPACE = 2 * DOT;
+  const int WORD_SPACE = 5 * DOT;
+
+  
+ 
+  message.toLowerCase();
+  for (int i = 0; i < size; i++) {
+    
+        // const char* ch = strchr(characters, tolower(message[i]));
+        char ch = characters.charAt(characters.indexOf(message.charAt(i)));//
+        // if (ch != NULL){
+   if (ch != '\0'){
+          
+          // int position = ch-characters;
+          int position = characters.indexOf(message.charAt(i));
+          
+          morsecode = mappings[position];
+          
+          // int count = strlen(morsecode);
+         int count = morsecode.length();
+          
+
+          
+          
+          for( int j=0; j< count; j++)
+          {
+            
+            char symbol = morsecode[j];
+            
+            if(symbol =='.')
+            {
+              sm_time = DOT;
+            }
+            
+            if(symbol =='-')
+            {
+              sm_time = DASH;
+            }
+         //   digitalWrite(KEY_PIN, HIGH); // only tone out needed
+
+         tone(tone_pin, my_tone_frequency);
+        
+            delay(sm_time);
+        //    digitalWrite(KEY_PIN, LOW);  // only tone out needed
+
+             noTone(tone_pin);
+            delay(SYMBOL_SPACE);
+          }// for loop close2
+          
+          delay(LETTER_SPACE);
+          
+        }
+        delay(WORD_SPACE);
+    
+  }// for loop close1
+ 
+} // FUNCTION messagetotone() close
